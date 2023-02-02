@@ -178,6 +178,8 @@ class BrainStack():
         Control the saving directory with the downsample_suffix option of BrainStack
         Does not return anything - self.downsampled_data has the stacks.
         '''
+        if pbar is None:
+            pbar = self.pbar
         if scales is None:
             scales = deeptrace_preferences['downsample_factor']
         self.downsampled_data = []
@@ -339,18 +341,26 @@ trailmap_segment_tif_files(model_path, files,pbar = pbar)
     chunks = np.zeros([2,len(chunks)])+chunks
     chunks = chunks.T.astype(int)
     chunks[:,1] += input_dim
-    
+    chunks += [len(files)-input_dim + dim_offset,len(files) + dim_offset]    # last chunk
     if not pbar is None:
+        pbar.reset()
         pbar.total = len(chunks)
-        pbar.set_description('[TRAILMAP] segmenting')
-    for ichunk,chunk in enumerate(chunks):
-        # get data from stack
-        arr = get_normalized_padded_input_array(files,chunk)
-        res = trailmap_apply_model(model,arr)
-        # save the array if stack is a BrainStack
+        pbar.set_description('[TRAILMAP] Segmenting...')
+        
+    def write_res(res,chunk):
         for i in range(dim_offset, input_dim - dim_offset):
             fname = os.path.basename(files[chunk[0]+i])
             out_fname = pjoin(output_folder,'seg-' + fname)
             imsave(out_fname,res[i])
+
+    for ichunk,chunk in enumerate(chunks):
+        # get data from stack
+        arr = get_normalized_padded_input_array(files,chunk)
+        # run the model
+        res = trailmap_apply_model(model,arr)
+        # save the array
+        write_res(res,chunk)
         if not pbar is None:
             pbar.update(1)
+    if not pbar is None:
+        pbar.set_description('[TRAILMAP] Completed')
