@@ -8,18 +8,12 @@ from natsort import natsorted
 from os.path import join as pjoin
 import numpy as np
 from tifffile import TiffFile,imread,imsave
-from tqdm import tqdm
 from multiprocessing import Pool
 from functools import partial
 from skimage import img_as_ubyte
 from scipy import ndimage
 from scipy.ndimage import rotate
-
 import sys
-if hasattr(sys.modules["__main__"], "get_ipython"):
-    from tqdm import notebook as tqdm
-else:
-    import tqdm
 
 deeptrace_path = pjoin(os.path.expanduser('~'), 'DeepTraCE')
 deeptrace_preferences_file = pjoin(deeptrace_path,'DeepTraCE_preferences.json')
@@ -59,11 +53,14 @@ def get_preferences(prefpath = None):
 
 deeptrace_preferences = get_preferences()
 
+def read_ome_tif(file):
+    return TiffFile(file).pages.get(0).asarray()
+
 # to read files
 class BrainStack():
     def __init__(self, channel_folders ,extension = 'tif',
                  downsample_suffix = pjoin('_scaled','10um.tif'),
-                 downsample = True,
+                 downsample = False,
                  pbar = None):
         '''
         +++++++++++++++++++++++++
@@ -136,7 +133,7 @@ class BrainStack():
         if not self.ibuf == i:
             d = []
             for ich in self.active_channels:
-                d.append(TiffFile(self.channel_files[ich][i]).pages.get(0).asarray())
+                d.append(read_ome_tif(self.channel_files[ich][i]))
             self.buf = np.stack(d)
         return self.buf
 
@@ -188,11 +185,12 @@ class BrainStack():
         for ichan in range(self.nchannels):
             folder = self.channel_folders[ichan]
             fname = os.path.abspath(folder) # in case there are slashes
-            fname = pjoin(fname,self.downsample_suffix)
+            fname = fname + self.downsample_suffix
             if os.path.exists(fname):
                 # load it
                 stack = imread(fname)
             else:
+                print('Downsampling channel {0}.'.format(ichan))
                 if not pbar is None:
                     pbar.reset() # reset the bar
                     pbar.set_description('Downsampling stack for channel {0}'.format(ichan))
@@ -220,62 +218,6 @@ def chunk_indices(nframes, chunksize = 512, min_chunk_size = 16):
         chunks = np.hstack([chunks,nframes])
     return [[chunks[i],chunks[i+1]] for i in range(len(chunks)-1)]
 
-
-def run_trailmap_segment_brain_on_model(code_path, model_path, input_folders,trailmap_env):
-    code = '''
-import os
-import sys
-sys.path.append('{code_path}')
-from inference import *
-from models import *
-import shutil
-
-if __name__ == "__main__":
-    input_batch = sys.argv[1:]
-    # Verify each path is a directory
-    for input_folder in input_batch:
-        if not os.path.isdir(input_folder):
-            raise Exception(input_folder + " is not a directory. Inputs must be a folder of files. Please refer to readme for more info")
-    # Load the network
-    weights_path = '{model_path}'
-
-    model = get_net()
-    model.load_weights(weights_path)
-
-    from tqdm import tqdm
-    for input_folder in tqdm(input_batch):
-        # Remove trailing slashes
-        input_folder = os.path.normpath(input_folder)
-        # Output folder name
-        output_name = "{model}_seg-" + os.path.basename(input_folder)
-        output_dir = os.path.dirname(input_folder)
-        output_folder = os.path.join(output_dir, output_name)
-        # Create output directory. Overwrite if the directory exists
-        if os.path.exists(output_folder):
-            print(output_folder + " already exists. Will be overwritten")
-            shutil.rmtree(output_folder)
-        os.makedirs(output_folder)
-        # Segment the brain
-        print('The results will be stored in:'+output_f)
-        segment_brain(input_folder, output_folder, model)
-''' # this is from trailmap, if the environment could be the same (imagej would work) we could skip this
-
-    tmpf = pjoin(deeptrace_path,'run_trailmap.py')
-    with open(tmpf,'w') as fd:
-        fd.write(code.format(model_path=model_path,
-                             model=os.path.splitext(os.path.basename(model_path))[0],
-                             code_path = code_path))
-    import subprocess as sub
-    cmd = r'cd {0} & conda activate {1} & python run_trailmap.py {2}'.format(
-        deeptrace_path, trailmap_env, ' '.join(input_folders))
-    print(cmd)
-    #sub.call(cmd,shell = True)
-
-
-def run_trailmap(folder):
-    '''
-    '''
-    return
 
 def downsample_stack(stack,scales,chunksize = 50, pbar=None):
     '''
@@ -335,3 +277,80 @@ def frame_to_rgb(frame):
     if tmp.dtype in [np.uint16]:
         tmp = img_as_ubyte(tmp).astype('uint8')
     return tmp 
+
+def trailmap_list_models():
+    return glob(pjoin(deeptrace_preferences['trailmap']['models_folder'],'*.hdf5'))
+
+def get_normalized_padded_input_array(files,chunk):
+    arr = []
+    for i in range(chunk[0],chunk[1]):
+        if i < 0:
+            arr.append(read_ome_tif(files[0]))
+        elif i > len(files)-1:
+            arr.append(read_ome_tif(files[len(files)-1]))
+        else:
+            arr.append(read_ome_tif(files[i]))
+            
+    return np.stack(arr).astype(np.float32)/(2**16 -1)
+    
+def trailmap_segment_tif_files(model_path, files,
+                               batch_size = 15,
+                               threshold = 0.01,
+                               pbar = None):
+    '''
+    trailmap_segment_tif_files - Run a segmentation TRAILMAP model on a brain volume
+    Inputs:
+       - model_path: path to the hdf5 model to use
+       - files: list of sorted files to use as input
+       - batch_size: dictates the size of the batch that is loaded to the GPU (default 16 - increase if you have enough memory)
+       - threshold: fragments threshold are not considered (default 0.01)
+       - pbar: progress bar to monitor progress (default None)
+    Outputs:
+       - segmented masks stored in a folder {model_name}_seg-{dataset_name}
+    Example:
+    
+files = stack.channel_files[1]
+from tqdm.notebook import tqdm
+pbar = tqdm()
+models = trailmap_list_models()
+model_path = models[4]
+trailmap_segment_tif_files(model_path, files,pbar = pbar)    
+
+    '''
+    print('Loading TRAILMAP network and model.')
+    from .trailmap_models import get_net,input_dim, output_dim,trailmap_apply_model
+    model = get_net()
+    model.load_weights(model_path)
+    print('Using model weight {0}'.format(os.path.basename(model_path)))
+
+    # create the output folders
+    input_folder = os.path.dirname(os.path.abspath(files[0]))
+    output_folder = pjoin(os.path.dirname(input_folder),
+                          "{0}_seg-{1}".format(
+                              os.path.splitext(os.path.basename(model_path))[0], 
+                              os.path.basename(input_folder)))
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+        print('Created {0}'.format(output_folder))
+
+    # parse the data in chunks of size output_dim
+    dim_offset = (input_dim - output_dim) // 2
+    chunks = np.arange(-dim_offset,len(files)-input_dim+dim_offset,output_dim)
+    chunks = np.zeros([2,len(chunks)])+chunks
+    chunks = chunks.T.astype(int)
+    chunks[:,1] += input_dim
+    
+    if not pbar is None:
+        pbar.total = len(chunks)
+        pbar.set_description('[TRAILMAP] segmenting')
+    for ichunk,chunk in enumerate(chunks):
+        # get data from stack
+        arr = get_normalized_padded_input_array(files,chunk)
+        res = trailmap_apply_model(model,arr)
+        # save the array if stack is a BrainStack
+        for i in range(dim_offset, input_dim - dim_offset):
+            fname = os.path.basename(files[chunk[0]+i])
+            out_fname = pjoin(output_folder,'seg-' + fname)
+            imsave(out_fname,res[i])
+        if not pbar is None:
+            pbar.update(1)
