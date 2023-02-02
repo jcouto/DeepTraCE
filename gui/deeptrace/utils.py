@@ -15,6 +15,12 @@ from skimage import img_as_ubyte
 from scipy import ndimage
 from scipy.ndimage import rotate
 
+import sys
+if hasattr(sys.modules["__main__"], "get_ipython"):
+    from tqdm import notebook as tqdm
+else:
+    import tqdm
+
 deeptrace_path = pjoin(os.path.expanduser('~'), 'DeepTraCE')
 deeptrace_preferences_file = pjoin(deeptrace_path,'DeepTraCE_preferences.json')
 
@@ -53,10 +59,12 @@ def get_preferences(prefpath = None):
 
 deeptrace_preferences = get_preferences()
 
-
 # to read files
 class BrainStack():
-    def __init__(self, channel_folders ,extension = 'tif'):
+    def __init__(self, channel_folders ,extension = 'tif',
+                 downsample_suffix = pjoin('_scaled','10um.tif'),
+                 downsample = True,
+                 pbar = None):
         '''
         +++++++++++++++++++++++++
         BrainStack(ch0, ch1=None)
@@ -66,15 +74,24 @@ class BrainStack():
         It expects one page per tif file; this can be adapted in the future
         
         Inputs:
-           - ch0: string; a folder that contains tif files (usually the 488nm channel)
-           - ch1: string; a folder that contains tif files (usually the 640nm channel)
-
+           - channel_folders: list of strings (folder paths that contains tif files - usually the 488nm channel and another for the 640nm stacks)
+           - extension: tif, the extension used to read the raw data
+           - downsample_suffix: suffix to add to the downsampled folder; default is _scalled/10um.tif
+           - downsample: load or compute the dowsampled stacks (default: False)
+           - pbar: progress bar to monitor progress.
+        
         Outputs:
            - a BrainStack object that can be indexed line a numpy array
         (Warning: don't try to load the whole array to memory)
 
-
         Example:
+
+        
+        from deeptrace import BrainStack
+        stack = BrainStack(channel_folders=['../../sampledata/210723_NAc326F_488_s3_0_8x_13-31-25/',
+                   '../../sampledata/210723_NAc326F_640_s3_0_8x_11-50-51/'],
+                   downsample = True)
+
         
         '''
         if type(channel_folders) is str:
@@ -104,11 +121,17 @@ class BrainStack():
         self.buf = None
         self.active_channels = [0]
         self.get(0) # load the buffer for the first frame
-        self.dims = self.buf.squeeze().shape
-        self.shape = [self.nframes,self.nchannels,*self.dims]
+        self.dims_original = self.buf.squeeze().shape
+        self.shape = [self.nframes,self.nchannels,*self.dims_original]
         self.active_channels = [i for i in range(self.nchannels)]
 
-        # try to get one frame 
+        self.pbar = pbar
+        # check for downsampled data
+        self.downsample_suffix = downsample_suffix
+        self.downsampled_stack = []
+        if downsample:
+            self.downsample(pbar = pbar)
+        
     def get(self,i):
         if not self.ibuf == i:
             d = []
@@ -134,7 +157,6 @@ class BrainStack():
             idx1 = [index]
         else: # np.array?
             idx1 = index
-
         img = []
         for i in idx1:
             img.append(self.get(i))
@@ -153,6 +175,39 @@ class BrainStack():
                 raise(ValueError('Channel {0} not available'.format(ichan)))
             self.active_channels.append(ichan)
 
+    def downsample(self,scales = None,save = True,pbar = None):
+        '''
+        open the downsampled data (read from tif or save to tif)
+        Control the saving directory with the downsample_suffix option of BrainStack
+        Does not return anything - self.downsampled_data has the stacks.
+        '''
+        if scales is None:
+            scales = deeptrace_preferences['downsample_factor']
+        self.downsampled_data = []
+        # try to read it
+        for ichan in range(self.nchannels):
+            folder = self.channel_folders[ichan]
+            fname = os.path.abspath(folder) # in case there are slashes
+            fname = pjoin(fname,self.downsample_suffix)
+            if os.path.exists(fname):
+                # load it
+                stack = imread(fname)
+            else:
+                if not pbar is None:
+                    pbar.reset() # reset the bar
+                    pbar.set_description('Downsampling stack for channel {0}'.format(ichan))
+                    pbar.total = self.nframes
+                self.set_active_channels(ichan)
+                stack = downsample_stack(self,scales,pbar = pbar)
+                # save it
+                if save:
+                    if not os.path.exists(os.path.dirname(fname)):
+                        os.makedirs(os.path.dirname(fname))
+                    imsave(fname,stack)
+            # saved stack
+            self.downsampled_data.append(stack)
+            
+
 def chunk_indices(nframes, chunksize = 512, min_chunk_size = 16):
     '''
     Gets chunk indices for iterating over an array in evenly sized chunks
@@ -166,13 +221,91 @@ def chunk_indices(nframes, chunksize = 512, min_chunk_size = 16):
     return [[chunks[i],chunks[i+1]] for i in range(len(chunks)-1)]
 
 
-def downsample_stack(stack,scales):
+def run_trailmap_segment_brain_on_model(code_path, model_path, input_folders,trailmap_env):
+    code = '''
+import os
+import sys
+sys.path.append('{code_path}')
+from inference import *
+from models import *
+import shutil
+
+if __name__ == "__main__":
+    input_batch = sys.argv[1:]
+    # Verify each path is a directory
+    for input_folder in input_batch:
+        if not os.path.isdir(input_folder):
+            raise Exception(input_folder + " is not a directory. Inputs must be a folder of files. Please refer to readme for more info")
+    # Load the network
+    weights_path = '{model_path}'
+
+    model = get_net()
+    model.load_weights(weights_path)
+
+    from tqdm import tqdm
+    for input_folder in tqdm(input_batch):
+        # Remove trailing slashes
+        input_folder = os.path.normpath(input_folder)
+        # Output folder name
+        output_name = "{model}_seg-" + os.path.basename(input_folder)
+        output_dir = os.path.dirname(input_folder)
+        output_folder = os.path.join(output_dir, output_name)
+        # Create output directory. Overwrite if the directory exists
+        if os.path.exists(output_folder):
+            print(output_folder + " already exists. Will be overwritten")
+            shutil.rmtree(output_folder)
+        os.makedirs(output_folder)
+        # Segment the brain
+        print('The results will be stored in:'+output_f)
+        segment_brain(input_folder, output_folder, model)
+''' # this is from trailmap, if the environment could be the same (imagej would work) we could skip this
+
+    tmpf = pjoin(deeptrace_path,'run_trailmap.py')
+    with open(tmpf,'w') as fd:
+        fd.write(code.format(model_path=model_path,
+                             model=os.path.splitext(os.path.basename(model_path))[0],
+                             code_path = code_path))
+    import subprocess as sub
+    cmd = r'cd {0} & conda activate {1} & python run_trailmap.py {2}'.format(
+        deeptrace_path, trailmap_env, ' '.join(input_folders))
+    print(cmd)
+    #sub.call(cmd,shell = True)
+
+
+def run_trailmap(folder):
+    '''
+    '''
+    return
+
+def downsample_stack(stack,scales,chunksize = 50, pbar=None):
+    '''
+    Downsample a stack
+
+    Inputs:
+       - stack, 3d stack or BrainStack (single channel)
+       - scales [dx,dy,dz] look at deeptrace_preferences['downscale_factor'] for reference
+
+    Outputs:
+       - downsampled stack as uint8
+
+    Example:
+    
+from tqdm.notebook import tqdm
+scales = deeptrace_preferences['downsample_factor']
+pbar = tqdm(total = len(stack))
+stack.set_active_channels(0)
+downsample_stack(stack,scales,pbar = pbar,chunksize = 256)
+pbar.close()
+    
+    '''
     downsampled = []
     with Pool() as pool:        
-        for s,e in tqdm(chunk_indices(len(stack),256),desc='Downsampling stack.'):
+        for s,e in chunk_indices(len(stack),chunksize):
             ss = stack[s:e]
             ss = img_as_ubyte(ss)
             downsampled.extend(pool.map(partial(ndimage.zoom, zoom=scales[:2]), [s for s in ss]))
+            if not pbar is None:
+                pbar.update(len(ss))
     downsampled = np.stack(downsampled)
     return ndimage.zoom(downsampled,[scales[-1],1,1])
 
@@ -180,7 +313,6 @@ def downsample_stack(stack,scales):
 def rotate_stack(stack, anglex = 0, angley = 0, anglez = 0):
     if anglez != 0:
         tt = rotate(stack, angle = anglez, axes = [1,2], reshape = False)
-        print(anglez)
     else:
         tt = stack.copy()
     if angley != 0.0:
