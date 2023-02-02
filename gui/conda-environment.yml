@@ -1,0 +1,19 @@
+name: deeptrace
+
+channels:
+   - conda-forge
+dependencies:
+   - python
+   - tensorflow-gpu
+   - scipy
+   - matplotlib
+   - jupyter
+   - simpleitk
+   - napari
+   - pip
+   - pip:
+     - tifffile
+     - tqdm
+     - ipywidgets
+     - scikit-image
+     
