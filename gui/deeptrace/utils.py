@@ -1,3 +1,4 @@
+
 import subprocess as sub
 import os
 import sys
@@ -243,6 +244,8 @@ pbar.close()
     
     '''
     downsampled = []
+    if not pbar is None:
+        pbar.total = len(stack)+1
     with Pool() as pool:        
         for s,e in chunk_indices(len(stack),chunksize):
             ss = stack[s:e]
@@ -251,7 +254,11 @@ pbar.close()
             if not pbar is None:
                 pbar.update(len(ss))
     downsampled = np.stack(downsampled)
-    return ndimage.zoom(downsampled,[scales[-1],1,1])
+    downsampled = ndimage.zoom(downsampled,[scales[-1],1,1])
+    if not pbar is None:
+        pbar.update(1)
+
+    return downsampled
 
 
 def rotate_stack(stack, anglex = 0, angley = 0, anglez = 0):
