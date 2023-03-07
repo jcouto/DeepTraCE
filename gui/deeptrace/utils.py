@@ -19,7 +19,7 @@ import shutil
 
 deeptrace_path = pjoin(os.path.expanduser('~'), 'DeepTraCE')
 deeptrace_preferences_file = pjoin(deeptrace_path,'DeepTraCE_preferences.json')
-print(deeptrace_path)
+
 defaults = dict(trailmap = dict(models_folder = pjoin(deeptrace_path,'models')),
                 elastix = dict(path = None,
                                temporary_folder = pjoin(deeptrace_path,'temp'),
@@ -292,7 +292,8 @@ class BrainStack():
                                            self.channel_files[trailmap_channel],
                                            analysis_path = self.analysis_folder,
                                            pbar = pbar)
-                # todo: check if all the files are there.
+            # todo: check if all the files are there.
+            if not model_folder in params['trailmap_segmentation']:
                 params['trailmap_segmentation'].append(model_folder)
 
         # downsample the first channel and all the model data
