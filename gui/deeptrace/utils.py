@@ -199,10 +199,12 @@ class BrainStack():
         # try to read it
         if not len(channel_indices):
             channel_indices = list(range(self.nchannels))
+        downsample_files = []
         for ichan in channel_indices:
             folder = self.channel_folders[ichan]
             fname = os.path.basename(os.path.abspath(folder)) # in case there are slashes
             fname = pjoin(self.analysis_folder, self.downsample_suffix,'{0}.tif'.format(fname))
+            downsample_files.append(fname)
             if os.path.exists(fname):
                 # load it
                 stack = imread(fname)
@@ -219,8 +221,10 @@ class BrainStack():
                     if not os.path.exists(os.path.dirname(fname)):
                         os.makedirs(os.path.dirname(fname))
                     imsave(fname,stack)
+                    
             # saved stack
             self.downsampled_stack.append(stack)
+        return downsample_files
 
     def deeptrace_analysis(self, angles = None,
                            trailmap_models = None,
@@ -267,13 +271,23 @@ class BrainStack():
         # Run trailmap models
         for model_path in trailmap_models:
             model_folder = pjoin(self.analysis_folder,
-                                 "{0}_seg-{1}".format(
+                                 "{0}_seg_{1}".format(
                                      os.path.splitext(os.path.basename(model_path))[0], 
-                                     os.path.basename(os.path.abspath(self.channel_folders[0]))))
-            if not os.path.exists(model_folder):
-                trailmap_segment_tif_files(model_path, self.channel_files[trailmap_channel],
+                                     os.path.basename(os.path.abspath(self.channel_folders[trailmap_channel]))))
+            if not 'trailmap_segmentation' in params.keys():
+                params['trailmap_segmentation'] = []
+            if os.path.isdir(model_folder):
+                trailmapfiles = glob(pjoin(model_folder,'*.tif'))
+                if not len(trailmapfiles) == len(self.channel_files[trailmap_channel]):
+                    raise(ValueError("[DeepTraCE] - File missmatch. Need to recompute trailmap, delete the folder: {0}".format(model_folder)))
+            else:
+                trailmap_segment_tif_files(model_path,
+                                           self.channel_files[trailmap_channel],
                                            analysis_path = self.analysis_folder,
                                            pbar = pbar)
+            # todo: check if all the files are there.
+            params['trailmap_segmentation'].append(model_folder)
+        
         print(params)
         
         
@@ -372,7 +386,7 @@ def get_normalized_padded_input_array(files,chunk):
     
 def trailmap_segment_tif_files(model_path, files,
                                analysis_path = None,
-                               batch_size = 15,
+                               batch_size = 128,
                                threshold = 0.01,
                                pbar = None):
     '''
@@ -384,7 +398,7 @@ def trailmap_segment_tif_files(model_path, files,
        - threshold: fragments threshold are not considered (default 0.01)
        - pbar: progress bar to monitor progress (default None)
     Outputs:
-       - segmented masks stored in a folder {model_name}_seg-{dataset_name}
+       - segmented masks stored in a folder {model_name}_seg_{dataset_name}
     Example:
     
 files = stack.channel_files[1]
@@ -406,7 +420,7 @@ trailmap_segment_tif_files(model_path, files,pbar = pbar)
     if analysis_path is None:
         analysis_path = os.path.dirname(input_folder)
     output_folder = pjoin(analysis_path,
-                          "{0}_seg-{1}".format(
+                          "{0}_seg_{1}".format(
                               os.path.splitext(os.path.basename(model_path))[0], 
                               os.path.basename(input_folder)))
     if not os.path.exists(output_folder):
@@ -419,7 +433,7 @@ trailmap_segment_tif_files(model_path, files,pbar = pbar)
     chunks = np.zeros([2,len(chunks)])+chunks
     chunks = chunks.T.astype(int)
     chunks[:,1] += input_dim
-    chunks += [len(files)-input_dim + dim_offset,len(files) + dim_offset]    # last chunk
+    chunks = np.vstack([chunks,[len(files)-input_dim + dim_offset,len(files) + dim_offset]])    # last chunk
     if not pbar is None:
         pbar.reset()
         pbar.total = len(chunks)
@@ -428,14 +442,13 @@ trailmap_segment_tif_files(model_path, files,pbar = pbar)
     def write_res(res,chunk):
         for i in range(dim_offset, input_dim - dim_offset):
             fname = os.path.basename(files[chunk[0]+i])
-            out_fname = pjoin(output_folder,'seg-' + fname)
+            out_fname = pjoin(output_folder,'seg_' + fname)
             imsave(out_fname,res[i])
-
     for ichunk,chunk in enumerate(chunks):
         # get data from stack
         arr = get_normalized_padded_input_array(files,chunk)
         # run the model
-        res = trailmap_apply_model(model,arr)
+        res = trailmap_apply_model(model,arr,batch_size = batch_size, threshold = threshold)
         # save the array
         write_res(res,chunk)
         if not pbar is None:
