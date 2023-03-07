@@ -15,10 +15,11 @@ from skimage import img_as_ubyte
 from scipy import ndimage
 from scipy.ndimage import rotate
 import sys
+import shutil
 
 deeptrace_path = pjoin(os.path.expanduser('~'), 'DeepTraCE')
 deeptrace_preferences_file = pjoin(deeptrace_path,'DeepTraCE_preferences.json')
-
+print(deeptrace_path)
 defaults = dict(trailmap = dict(models_folder = pjoin(deeptrace_path,'models')),
                 elastix = dict(path = None,
                                temporary_folder = pjoin(deeptrace_path,'temp'),
@@ -227,6 +228,7 @@ class BrainStack():
         return downsample_files
 
     def deeptrace_analysis(self, angles = None,
+                           scales = None,
                            trailmap_models = None,
                            trailmap_channel = None,
                            pbar = None):
@@ -247,7 +249,11 @@ class BrainStack():
                 trailmap_channel = params['trailmap_channel']
             else:
                 trailmap_channel = 1
-            
+
+        if scales is None:
+            if 'scales' in params.keys():
+                scales = deeptrace_preferences['downsample_factor']
+        
         if angles is None:
             if 'angles' in params.keys():
                 angles = params['angles']
@@ -260,6 +266,7 @@ class BrainStack():
                 return res
         params['trailmap_channel'] = trailmap_channel
         params['angles'] = angles
+        params['scales'] = scales
         params['trailmap_models'] = trailmap_models
         params['analysis_folder'] = self.analysis_folder
         if not os.path.exists(os.path.dirname(fname)):
@@ -285,8 +292,59 @@ class BrainStack():
                                            self.channel_files[trailmap_channel],
                                            analysis_path = self.analysis_folder,
                                            pbar = pbar)
-            # todo: check if all the files are there.
-            params['trailmap_segmentation'].append(model_folder)
+                # todo: check if all the files are there.
+                params['trailmap_segmentation'].append(model_folder)
+
+        # downsample the first channel and all the model data
+        folder =  pjoin(self.analysis_folder,'rotated')
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+        filename = pjoin(folder,'align_channel.tiff')
+        # downsample the first channel
+        if not os.path.exists(filename):
+            print('Downsampling the alignment channel to {0}'.format(filename))
+            self.set_active_channels(0)
+            stack = downsample_stack(self, scales, pbar = pbar)
+            print('Rotating the alignment channel')
+            to_elastix = rotate_stack(stack,
+                                      *angles)
+            imsave(filename,to_elastix)
+        else:
+            to_elastix = imread(filename)
+        # run elastix on the first channel
+        aligned_file = pjoin(self.analysis_folder,'aligned.tiff')
+        transform_path = pjoin(self.analysis_folder,'transformix.txt')
+        if not os.path.exists(transform_path):
+            print('Fitting the alignment channel with elastix')
+            from .elastix_utils import elastix_fit
+            aligned,transformpath = elastix_fit(to_elastix,pbar = pbar)
+            shutil.copyfile(transformpath,transform_path)
+            imsave(aligned_file,aligned)
+        else:
+            aligned = imread(aligned_file)
+        
+        # downsample all the model stacks and apply transforms
+        if 'trailmap_segmentation' in params.keys():
+            modeldata = BrainStack(params['trailmap_segmentation'])
+            for ichan in range(len(params['trailmap_segmentation'])):
+                # save downsampled and rotated
+                modelname = os.path.basename(params['trailmap_segmentation'][ichan])
+                filename = pjoin(folder,modelname+'.tiff')
+                if not os.path.exists(filename):
+                    print('Downsampling the {0} model'.format(modelname))
+                    modeldata.set_active_channels(ichan)
+                    stack = downsample_stack(modeldata,scales,pbar = pbar)
+                    print('Rotating the model')
+                    to_elastix = rotate_stack(stack,
+                                              *angles)
+                    imsave(filename,to_elastix)
+                else:
+                    to_elastix = imread(filename)
+                from .elastix_utils import elastix_apply_transform
+                aligned_file = pjoin(self.analysis_folder,modelname+'_aligned.tiff')
+                if not os.path.exists(aligned_file):
+                    aligned_res = elastix_apply_transform(to_elastix,transform_path,pbar = pbar)
+                    imsave(aligned_file,aligned_res)
         
         print(params)
         
@@ -304,7 +362,7 @@ def chunk_indices(nframes, chunksize = 512, min_chunk_size = 16):
     return [[chunks[i],chunks[i+1]] for i in range(len(chunks)-1)]
 
 
-def downsample_stack(stack,scales,chunksize = 50, pbar=None):
+def downsample_stack(stack,scales, convert = True, chunksize = 50, pbar=None):
     '''
     Downsample a stack
 
@@ -331,7 +389,8 @@ pbar.close()
     with Pool() as pool:        
         for s,e in chunk_indices(len(stack),chunksize):
             ss = stack[s:e]
-            ss = img_as_ubyte(ss)
+            if convert:
+                ss = img_as_ubyte(ss)
             downsampled.extend(pool.map(partial(ndimage.zoom, zoom=scales[:2]), [s for s in ss]))
             if not pbar is None:
                 pbar.update(len(ss))

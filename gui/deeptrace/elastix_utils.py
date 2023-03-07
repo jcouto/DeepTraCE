@@ -1,6 +1,5 @@
 from .utils import *
 
-
 ################################################################
 ######### Transform parameters passed to ELASTIX ###############
 ################################################################
@@ -153,8 +152,7 @@ def elastix_fit(stack,
                 par0 = elastixpar0,
                 par1 = elastixpar1,
                 outpath = None,
-                pba
-                r = None):
+                pbar = None):
     # TODO: Adjust so it takes a variable number of parameters.
     
     # make that it works with registration template being an array!
@@ -190,8 +188,8 @@ def elastix_fit(stack,
         p1 = p1)
     proc = sub.Popen(elastixcmd.split(' '),
                  shell=False,
-                 stdout=sub.PIPE,
-                 preexec_fn=os.setsid)
+                 stdout=sub.PIPE)
+                 # preexec_fn=os.setsid) # does not work on windows?
     if not pbar is None:
         pbar.set_description('Running elastix')
         pbar.reset()
@@ -234,8 +232,8 @@ def elastix_apply_transform(stack,transform_path,
         t1 = transform_path)
     proc = sub.Popen(elastixcmd.split(' '),
                  shell=False,
-                 stdout=sub.PIPE,
-                 preexec_fn=os.setsid)
+                 stdout=sub.PIPE)
+                 #preexec_fn=os.setsid)  # does not work on windows
     if not pbar is None:
         pbar.set_description('Running transformix')
         pbar.reset()

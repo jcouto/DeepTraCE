@@ -6,3 +6,5 @@ from .utils import (BrainStack,
                     trailmap_segment_tif_files,
                     trailmap_list_models,
                     deeptrace_preferences)
+
+from .elastix_utils import elastix_fit, elastix_apply_transform

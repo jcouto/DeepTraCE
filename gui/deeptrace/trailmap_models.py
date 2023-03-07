@@ -27,8 +27,8 @@
 import tensorflow as tf
 from tensorflow.keras import backend as K
 # set the log to check which devices get allocated...remove this later
-tf.config.list_physical_devices('GPU')
-tf.debugging.set_log_device_placement(True)
+#tf.config.list_physical_devices('GPU')
+#tf.debugging.set_log_device_placement(True)
 
 import numpy as np
 
