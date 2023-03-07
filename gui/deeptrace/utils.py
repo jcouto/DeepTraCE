@@ -19,13 +19,16 @@ import sys
 deeptrace_path = pjoin(os.path.expanduser('~'), 'DeepTraCE')
 deeptrace_preferences_file = pjoin(deeptrace_path,'DeepTraCE_preferences.json')
 
-defaults = dict(trailmap = dict(path = pjoin(os.path.expanduser('~'),'trailmap'),
-                                environment = 'trailmap_env',
-                                models_folder = pjoin(deeptrace_path,'models')),
-                fiji = dict(path = pjoin(os.path.expanduser('~'),'Fiji.app')),
-                elastix = dict(path = pjoin(os.path.expanduser('~'),'Elastix')),
+defaults = dict(trailmap = dict(models_folder = pjoin(deeptrace_path,'models')),
+                elastix = dict(path = None,
+                               temporary_folder = pjoin(deeptrace_path,'temp'),
+                               registration_template = pjoin(deeptrace_path, 'registration',
+                                                             'average_template_lsfm_10_crop_flip.tif')),
                 downsample_factor = [0.40625,0.40625,0.3])
 
+def create_folder_if_no_filepath(path):
+    if not os.path.exists(os.path.dirname(path)):
+        os.makedirs(os.path.dirname(path))
 
 def get_preferences(prefpath = None):
     ''' Reads the user parameters from the home directory.
@@ -60,7 +63,8 @@ def read_ome_tif(file):
 # to read files
 class BrainStack():
     def __init__(self, channel_folders ,extension = 'tif',
-                 downsample_suffix = pjoin('_scaled','10um.tif'),
+                 analysis_folder = None,
+                 downsample_suffix = 'scaled',
                  downsample = False,
                  pbar = None):
         '''
@@ -91,7 +95,7 @@ class BrainStack():
                    downsample = True)
 
         
-        '''
+        '''            
         if type(channel_folders) is str:
             # then it must be made a list
             channel_folders = [channel_folders]
@@ -111,7 +115,14 @@ class BrainStack():
             raise(OSError(
                 '[DeepTraCE] There is a missmatch in the number of {0} files in the folder.'.format(
                     extension)))
-        
+        self.pathdict = dict()
+        for i,f in enumerate(self.channel_folders):
+            self.pathdict['ch{0}folder'.format(i)] = os.path.abspath(f)
+            self.pathdict['ch{0}'.format(i)] = os.path.basename(os.path.abspath(f))
+
+        if analysis_folder is None:
+            self.analysis_folder = pjoin('{ch0folder}','..','deeptrace_analysis','{ch0}')
+        self.analysis_folder = os.path.abspath(self.analysis_folder.format(**self.pathdict))
         # this function expects one image per folder so the nframes is the number of files
         self.nframes = len(self.channel_files[0])
         self.nchannels = len(self.channel_files)
@@ -127,6 +138,7 @@ class BrainStack():
         # check for downsampled data
         self.downsample_suffix = downsample_suffix
         self.downsampled_stack = []
+
         if downsample:
             self.downsample(pbar = pbar)
         
@@ -173,7 +185,7 @@ class BrainStack():
                 raise(ValueError('Channel {0} not available'.format(ichan)))
             self.active_channels.append(ichan)
 
-    def downsample(self,scales = None,save = True,pbar = None):
+    def downsample(self,scales = None, channel_indices = [], save = True, pbar = None):
         '''
         open the downsampled data (read from tif or save to tif)
         Control the saving directory with the downsample_suffix option of BrainStack
@@ -183,17 +195,19 @@ class BrainStack():
             pbar = self.pbar
         if scales is None:
             scales = deeptrace_preferences['downsample_factor']
-        self.downsampled_data = []
+        self.downsampled_stack = []
         # try to read it
-        for ichan in range(self.nchannels):
+        if not len(channel_indices):
+            channel_indices = list(range(self.nchannels))
+        for ichan in channel_indices:
             folder = self.channel_folders[ichan]
-            fname = os.path.abspath(folder) # in case there are slashes
-            fname = fname + self.downsample_suffix
+            fname = os.path.basename(os.path.abspath(folder)) # in case there are slashes
+            fname = pjoin(self.analysis_folder, self.downsample_suffix,'{0}.tif'.format(fname))
             if os.path.exists(fname):
                 # load it
                 stack = imread(fname)
             else:
-                print('Downsampling channel {0}.'.format(ichan))
+                print('Downsampling channel {0} to {1}.'.format(ichan,fname))
                 if not pbar is None:
                     pbar.reset() # reset the bar
                     pbar.set_description('Downsampling stack for channel {0}'.format(ichan))
@@ -206,9 +220,63 @@ class BrainStack():
                         os.makedirs(os.path.dirname(fname))
                     imsave(fname,stack)
             # saved stack
-            self.downsampled_data.append(stack)
-            
+            self.downsampled_stack.append(stack)
 
+    def deeptrace_analysis(self, angles = None,
+                           trailmap_models = None,
+                           trailmap_channel = None,
+                           pbar = None):
+        params = dict()
+        fname = pjoin(self.analysis_folder,'deeptrace_parameters.json')
+        if os.path.exists(fname):
+            with open(fname,'r') as f:
+                params = json.load(f)
+            
+        if trailmap_models is None:
+            if 'trailmap_models' in params.keys():
+                trailmap_models = params['trailmap_models']
+            else:
+                trailmap_models = trailmap_list_models()  # use all models
+            
+        if trailmap_channel is None:
+            if 'trailmap_channel' in params.keys():
+                trailmap_channel = params['trailmap_channel']
+            else:
+                trailmap_channel = 1
+            
+        if angles is None:
+            if 'angles' in params.keys():
+                angles = params['angles']
+            else:
+                print('Rotation angles are not set, please select at least one angle.')
+                if not len(self.downsampled_stack):
+                    self.downsample(channel_indices = [0]) # downsample the first channel
+                from deeptrace.plotting import interact_find_angles
+                res = interact_find_angles(self.downsampled_stack[0])
+                return res
+        params['trailmap_channel'] = trailmap_channel
+        params['angles'] = angles
+        params['trailmap_models'] = trailmap_models
+        params['analysis_folder'] = self.analysis_folder
+        if not os.path.exists(os.path.dirname(fname)):
+            os.makedirs(os.path.dirname(fname))
+        with open(fname,'w') as f:
+            json.dump(params,f,
+                      sort_keys = True, 
+                      indent = 4)
+        # Run trailmap models
+        for model_path in trailmap_models:
+            model_folder = pjoin(self.analysis_folder,
+                                 "{0}_seg-{1}".format(
+                                     os.path.splitext(os.path.basename(model_path))[0], 
+                                     os.path.basename(os.path.abspath(self.channel_folders[0]))))
+            if not os.path.exists(model_folder):
+                trailmap_segment_tif_files(model_path, self.channel_files[trailmap_channel],
+                                           analysis_path = self.analysis_folder,
+                                           pbar = pbar)
+        print(params)
+        
+        
 def chunk_indices(nframes, chunksize = 512, min_chunk_size = 16):
     '''
     Gets chunk indices for iterating over an array in evenly sized chunks
@@ -303,6 +371,7 @@ def get_normalized_padded_input_array(files,chunk):
     return np.stack(arr).astype(np.float32)/(2**16 -1)
     
 def trailmap_segment_tif_files(model_path, files,
+                               analysis_path = None,
                                batch_size = 15,
                                threshold = 0.01,
                                pbar = None):
@@ -334,7 +403,9 @@ trailmap_segment_tif_files(model_path, files,pbar = pbar)
 
     # create the output folders
     input_folder = os.path.dirname(os.path.abspath(files[0]))
-    output_folder = pjoin(os.path.dirname(input_folder),
+    if analysis_path is None:
+        analysis_path = os.path.dirname(input_folder)
+    output_folder = pjoin(analysis_path,
                           "{0}_seg-{1}".format(
                               os.path.splitext(os.path.basename(model_path))[0], 
                               os.path.basename(input_folder)))
