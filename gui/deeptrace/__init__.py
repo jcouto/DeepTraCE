@@ -1,5 +1,4 @@
-from .utils import (BrainStack,
-                    downsample_stack,
+from .utils import (downsample_stack,
                     rotate_stack,
                     frame_to_rgb,
                     chunk_indices,
@@ -8,3 +7,4 @@ from .utils import (BrainStack,
                     deeptrace_preferences)
 
 from .elastix_utils import elastix_fit, elastix_apply_transform
+from .analysis import BrainStack
