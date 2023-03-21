@@ -54,14 +54,14 @@ Usage:
                     initcolor='w',
                     valinit = len(X)//2)
     def update(val):
-        if not type(val) in [float,int,np.int64,np.float64]:
+        if not type(val) in [float,int,np.int64,np.float64,np.int32]:
             if val.key in ['right','d']:
                 islide.set_val(np.clip(islide.val + 1,0,len(X)-1))
             elif val.key in ['left','a']:
                 islide.set_val(np.clip(islide.val - 1,0,len(X)-1))
         iplane = int(np.floor(islide.val))
         im.set_data(X[iplane])
-        if not type(val) in [float,int,np.int64,np.float64]:
+        if not type(val) in [float,int,np.int64,np.float64,np.int32]:
             if val.key in ['right','d']:
                 islide.set_val(np.clip(islide.val + 1,0,len(X)-1))
             elif val.key in ['left','a']:
@@ -126,7 +126,7 @@ def interact_show_stack(X,cmap = 'gray',clim = None):
                     initcolor='w',
                     valinit = len(X)//2)
     def update(val):
-        if not type(val) in [float,int,np.int64,np.float64]:
+        if not type(val) in [float,int,np.int64,np.float64,np.int32]:
             if val.key in ['right','d']:
                 islide.set_val(np.clip(islide.val + 1,0,len(X)-1))
             elif val.key in ['left','a']:
