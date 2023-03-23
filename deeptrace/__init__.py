@@ -4,7 +4,9 @@ from .utils import (downsample_stack,
                     chunk_indices,
                     trailmap_segment_tif_files,
                     trailmap_list_models,
-                    deeptrace_preferences)
+                    deeptrace_preferences,
+                    load_deeptrace_models,
+                    read_atlas)
 
 from .elastix_utils import elastix_fit, elastix_apply_transform
 from .analysis import BrainStack
