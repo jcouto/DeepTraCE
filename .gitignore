@@ -1,0 +1,10 @@
+*.*~
+*.cpython*
+PKG-INFO
+dependency_links.txt
+requires.txt
+SOURCES.txt
+top_level.txt
+*.egg-info
+.ipynb_checkpoints
+Untitled.ipynb
