@@ -227,9 +227,16 @@ def get_net():
     from tensorflow.keras.models import Model
 
     model = Model(inputs=input, outputs=preds)
-    from tensorflow.keras.optimizers import Adam
-    model.compile(optimizer=Adam(lr=0.001, decay=0.00), loss=weighted_binary_crossentropy,
-                  metrics=[axon_precision, axon_recall, f1_score, artifact_precision, edge_axon_precision, adjusted_accuracy])
+    try:
+        from tensorflow.keras.optimizers.legacy import Adam
+    except:
+        from tensorflow.keras.optimizers import Adam
+    	
+    model.compile(optimizer=Adam(lr=0.001, decay=0.00),
+                  loss=weighted_binary_crossentropy,
+    		  metrics=[axon_precision, axon_recall,
+                           f1_score, artifact_precision,
+                           edge_axon_precision, adjusted_accuracy])
 
     return model
 
