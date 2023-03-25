@@ -269,7 +269,7 @@ class BrainStack():
                 if not os.path.exists(filename):
                     print('[DeepTraCE] Downsampling the {0} model'.format(modelname))
                     modeldata.set_active_channels(ichan)
-                    stack = downsample_stack(modeldata,scales,pbar = pbar)
+                    stack = downsample_stack(modeldata,scales,pbar = pbar, convert = True) # convert to uint8
                     print('[DeepTraCE] Rotating the model')
                     to_elastix = rotate_stack(stack,
                                               *angles)
@@ -286,6 +286,9 @@ class BrainStack():
 
         
 def trailmap_list_models():
+    '''
+    Lists trailmap models in the models_folder
+    '''
     return glob(pjoin(deeptrace_preferences['trailmap']['models_folder'],'*.hdf5'))
 
 def get_normalized_padded_input_array(files,chunk):
@@ -322,7 +325,10 @@ from tqdm.notebook import tqdm
 pbar = tqdm()
 models = trailmap_list_models()
 model_path = models[4]
-trailmap_segment_tif_files(model_path, files,pbar = pbar)    
+trailmap_segment_tif_files(model_path, files,pbar = pbar)  
+
+    This is adapted from the trailmap examples.
+    JC - 01/2023
 
     '''
     print('Loading TRAILMAP network and model.')
@@ -372,6 +378,55 @@ trailmap_segment_tif_files(model_path, files,pbar = pbar)
     if not pbar is None:
         pbar.set_description('[TRAILMAP] Completed')
 
+
+from skimage.morphology import  skeletonize_3d
+from skimage import measure
+from multiprocessing import Pool
+
+def skeletonize_multithreshold_uint8_stack(stack, nbins = 8):
+    '''
+    This runs skeletonize_3d for the threshold values in parallel. 
+    Thin each connected component single-pixel wide skeleton for different thresholds (nbins).
+    It needs a bit of RAM.
+    skel_threshold is from 0-255
+
+    JC - 03/2023
+    '''
+    thresh = ((np.linspace(3,nbins+2,nbins)-1.)/(nbins+2) * 255).astype('uint8')
+    with Pool() as pool:
+        bws = pool.map(skeletonize_3d,[(stack>th).astype(bool) for th in thresh])
+    res = (np.stack(bws).astype(bool).T*np.arange(len(bws))).T.sum(axis = 0)
+    return res
+
+def refine_connected_components(stack,nbins = 8, skel_threshold = 5, area_threshold = 90):
+    '''
+    refined_components = refine_connected_components(stack,nbins = 8, skel_threshold = 5, area_threshold = 90)
+
+    This:
+     - runs skeletonize_3d for the "nbins" threshold values in parallel. 
+     - thins each connected component single-pixel wide skeleton for different thresholds (nbins).  
+     - combines all thresholds into a weighted average, giving more weight to the more restrictive bins.
+     - finds connected components that have more than "skel_threshold" value
+     - finally, removes connected components that have less than "area_threshold" pixels
+
+    
+    JC - 03/2023
+    '''
+
+    res = skeletonize_multithreshold_uint8_stack(stack,nbins = nbins)
+    labels = measure.label(res>skel_threshold)
+    regions = measure.regionprops(labels)
+    nregions = list(filter(lambda x: x.area > area_threshold, regions))
+    
+    threshres = np.zeros_like(stack,dtype=bool)
+    idx = []
+    for r in nregions:
+        idx.append(r.coords)
+    idx = np.vstack(idx)
+    threshres[idx[:,0],idx[:,1],idx[:,2]] = True
+
+    return threshres
+
 def read_atlas(atlas_path = deeptrace_preferences['atlas'],
                ontology_path = deeptrace_preferences['ontology']):
     '''
@@ -379,6 +434,7 @@ def read_atlas(atlas_path = deeptrace_preferences['atlas'],
 
     atlas,ontology = read_atlas()
     
+    JC - 03/2023
     '''
     import pandas as pd
     import nrrd
