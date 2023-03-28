@@ -1,7 +1,7 @@
 from .utils import *
 import pylab as plt
 
-def interact_find_angles(X,cmap = 'gray',clim = None):
+def interact_find_angles(X,cmap = 'gray',clim = None,**kwargs):
     '''
     Interactive tool to find rotation angles using matplotlib
        - left arrow or "a" key (decrease slice)
@@ -35,9 +35,9 @@ Usage:
     ax = fig.add_axes([0,0,1,1])
     iframe = len(X)//2
     im = plt.imshow(X[iframe],
-                    aspect = 'auto',
                     clim=clim,
-                   cmap = cmap)
+                    cmap = cmap,
+                    **kwargs)
     txt = plt.text(0,0,iframe,color = 'w',va = 'top')
     points = dict()
     for k in ['x','y','z']:
@@ -94,7 +94,7 @@ Usage:
     fig.canvas.mpl_connect('key_press_event', update)
     return points_dict
 
-def interact_show_stack(X,cmap = 'gray',clim = None):
+def interact_show_stack(X,cmap = 'gray',clim = None,**kwargs):
     '''
     Interactive stack plot using matplotlib
        - left arrow or "a" key (decrease slice)
@@ -113,9 +113,9 @@ def interact_show_stack(X,cmap = 'gray',clim = None):
     ax = fig.add_axes([0,0,1,1])
     iframe = len(X)//2
     im = plt.imshow(X[iframe],
-                    aspect = 'auto',
                     clim=clim,
-                   cmap = cmap)
+                   cmap = cmap,
+                   **kwargs)
     txt = plt.text(0,0,iframe,color = 'w',va = 'top')
     sliderax = fig.add_axes([0.01, 0.01, 0.15, 0.01])
     islide = Slider(sliderax,
