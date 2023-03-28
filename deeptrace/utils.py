@@ -16,6 +16,7 @@ from scipy import ndimage
 from scipy.ndimage import rotate
 import sys
 import shutil
+import pandas as pd
 
 deeptrace_path = pjoin(os.path.expanduser('~'), 'DeepTraCE')
 deeptrace_preferences_file = pjoin(deeptrace_path,'DeepTraCE_preferences.json')
