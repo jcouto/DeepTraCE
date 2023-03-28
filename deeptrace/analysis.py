@@ -517,3 +517,28 @@ def combine_models(models, default_model, model_correspondence=None, ontology = 
                 combined[atlas == ii] = models[o.model-1][atlas == ii]
     
     return combined, model_correspondence
+
+
+def count_labeling_density(refined_model, model_selection, ontology = None, atlas = None):
+
+    if ontology is None or atlas is None:
+        atlas, ontology, header = read_atlas()
+    model_selection['volume_pixels'] = np.nan
+    model_selection['count_pixels'] = np.nan
+    for i,o in model_selection.iterrows():
+        model_selection.loc[i,'volume_pixels'] = 0
+        model_selection.loc[i,'count_pixels'] = 0
+        for ii in model_selection.loc[i,'atlas_ids']:
+            mask = (atlas==ii)
+            model_selection.loc[i,'volume_pixels'] += np.sum(mask)
+            model_selection.loc[i,'count_pixels'] +=  np.sum(refined_model[mask])
+    model_selection['density'] = model_selection.count_pixels/model_selection.volume_pixels
+    # get colors from the ontology
+    model_selection['color'] = '#FFFFFF'
+    for i,m in model_selection.iterrows():
+        idx = np.where(model_selection.loc[i,'atlas_name'].strip("'") == ontology['name'])[0]
+        c = ontology.iloc[idx[0]]['color_hex_triplet']
+        if len(c) != 6:
+            c += 'e' # some triplets are not 
+        model_selection.loc[i,'color'] = '#' + c
+    return model_selection

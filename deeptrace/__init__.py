@@ -10,5 +10,6 @@ from .analysis import (BrainStack, read_atlas, load_deeptrace_models,
                        trailmap_list_models,
                        refine_connected_components,
                        skeletonize_multithreshold_uint8_stack,
-                       combine_models)
+                       combine_models,
+                       count_labeling_density)
 
