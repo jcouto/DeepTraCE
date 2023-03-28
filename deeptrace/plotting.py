@@ -1,7 +1,8 @@
 from .utils import *
 import pylab as plt
+from skimage import morphology,feature
 
-def interact_find_angles(X,cmap = 'gray',clim = None,**kwargs):
+def interact_find_angles(X, aspect='auto',cmap = 'gray',clim = None,**kwargs):
     '''
     Interactive tool to find rotation angles using matplotlib
        - left arrow or "a" key (decrease slice)
@@ -35,6 +36,7 @@ Usage:
     ax = fig.add_axes([0,0,1,1])
     iframe = len(X)//2
     im = plt.imshow(X[iframe],
+                    aspect = aspect,
                     clim=clim,
                     cmap = cmap,
                     **kwargs)
@@ -133,6 +135,57 @@ def interact_show_stack(X,cmap = 'gray',clim = None,**kwargs):
                 islide.set_val(np.clip(islide.val - 1,0,len(X)-1))
         f = int(np.floor(islide.val))
         im.set_data(X[f])
+        txt.set_text(f)
+    islide.on_changed(update)
+    fig.canvas.mpl_connect('key_press_event', update)
+    return 
+
+def interact_stack_overlay_areas(X,atlas, cmap = 'gray_r',clim = None,overlay_color = 'darkred'):
+    '''
+    Interactive stack plot using matplotlib
+       - left arrow or "a" key (decrease slice)
+       - right arrow or "d" key (increase slice)
+
+    Example:
+
+       - Y is a SLICESxHxW array
+
+    '''
+    from matplotlib.widgets import Slider
+    fig = plt.figure()
+    fig.clf()
+    ax = fig.add_axes([0,0,1,1])
+    iframe = len(X)//2
+    def get_edges(iframe):
+        edg = feature.canny(atlas[:,:,iframe],sigma = 3)
+        return morphology.dilation(edg).astype(bool)
+    
+    cm1 = plt.matplotlib.colors.ListedColormap(['none', overlay_color])
+
+    im = plt.imshow(X[:,:,iframe],
+                    aspect = 'auto',
+                    clim=clim,
+                   cmap = cmap)
+    ed = plt.imshow(get_edges(iframe),cmap = cm1) 
+
+    txt = plt.text(0,0,iframe,color = 'w',va = 'top')
+    sliderax = fig.add_axes([0.01, 0.01, 0.15, 0.01])
+    islide = Slider(sliderax,
+                    'slice #',
+                    valmin=0,
+                    valmax=len(X)-1,
+                    valstep=1,
+                    initcolor='w',
+                    valinit = len(X)//2)
+    def update(val):
+        if not type(val) in [float,int,np.int64,np.float64,np.int32]:
+            if val.key in ['right','d']:
+                islide.set_val(np.clip(islide.val + 1,0,len(X)-1))
+            elif val.key in ['left','a']:
+                islide.set_val(np.clip(islide.val - 1,0,len(X)-1))
+        f = int(np.floor(islide.val))
+        im.set_data(X[:,:,f])
+        ed.set_data(get_edges(f))
         txt.set_text(f)
     islide.on_changed(update)
     fig.canvas.mpl_connect('key_press_event', update)
