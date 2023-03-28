@@ -1,5 +1,6 @@
 from .utils import *
 
+
 class BrainStack():
     def __init__(self, channel_folders ,extension = 'tif',
                  analysis_folder = None,
@@ -462,7 +463,6 @@ def load_deeptrace_models(path):
         raise(OSError('[DeepTraCE] Analysis results not found in {0}'.format(path)))
     aligned = imread(aligned_file)
     aligned_models = []
-    merged_model = None
     if not 'trailmap_models' in params.keys():
         raise(OSError('[DeepTraCE] No models found in {0}'.format(path)))
     else:
@@ -472,5 +472,48 @@ def load_deeptrace_models(path):
             if len(files):
                 aligned_models.append(imread(files[0]))
             else:
-                raise(OSError('[DeepTraCE] No models {0} in {1}'.format(modelname,path)))            
-    return params,aligned,aligned_models,merged_model
+                raise(OSError('[DeepTraCE] No models {0} in {1}'.format(modelname,path)))
+    return params,aligned,aligned_models
+
+def combine_models(models, default_model, model_correspondence=None, ontology = None, atlas = None):
+    '''
+    Combines multiple models in one.
+
+    Models are refered by number - 1 based (first model is model 1).
+    combined_model, model_correspondence = combine_models(models,model_correspondence, default_model, ontology, atlas)
+
+    models: List of models
+    default_model: which model to use by default
+    model_correspondence: pandas dataframe with fields ("atlas_name" and "model") or a string to a cvs table
+    ontology: the atlas ontology to use (default will load from the preferences)
+    atlas: the atlas to use (default will load from the preferences)
+    '''
+    atlas = None
+    ontology = None
+    model_correspondence = None
+    if atlas is None or ontology is None:
+        atlas,ontology,header = read_atlas()
+    if default_model is None:
+        default_model = int(len(models)/2)+1
+    # load from the preferences
+    if model_correspondence is None:
+        model_correspondence = deeptrace_preferences['model_selection']    
+    if type(model_correspondence) is str:
+        model_correspondence = pd.read_csv(model_correspondence)
+    # find out the unique atlas numbers
+    unique_atlas_ids = np.unique(atlas)
+    model_correspondence['atlas_ids'] = [[] for i in range(len(model_correspondence))]
+    # find the atlas IDs from the model selections
+    for i,m in model_correspondence.iterrows():
+        for j,o in ontology.iterrows():
+            if m.atlas_name.strip("'") in o['name']:
+                if o['id'] in unique_atlas_ids:
+                    m['atlas_ids'].append(o['id'])
+    # Make the combined model                     
+    combined = models[default_model-1].copy()
+    for i,o in model_correspondence.iterrows():
+        if not o.model == default_model:
+            for ii in o.atlas_ids:
+                combined[atlas == ii] = models[o.model-1][atlas == ii]
+    
+    return combined, model_correspondence
