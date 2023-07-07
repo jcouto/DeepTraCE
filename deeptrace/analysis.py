@@ -189,8 +189,7 @@ class BrainStack():
                 trailmap_channel = 1
 
         if scales is None:
-            if 'scales' in params.keys():
-                scales = deeptrace_preferences['downsample_factor']
+            scales = deeptrace_preferences['downsample_factor']
         
         if angles is None:
             if 'angles' in params.keys():
@@ -204,7 +203,8 @@ class BrainStack():
                 return res
         params['trailmap_channel'] = trailmap_channel
         params['angles'] = angles
-        params['scales'] = scales
+        if scales is None:
+            params['scales'] = deeptrace_preferences['downsample_factor']
         params['trailmap_models'] = trailmap_models
         params['analysis_folder'] = self.analysis_folder
         create_folder_if_no_filepath(fname)
@@ -254,9 +254,9 @@ class BrainStack():
         if not os.path.exists(transform_path):
             print('[DeepTraCE] Fitting the alignment channel with elastix')
             from .elastix_utils import elastix_fit
-            aligned,transformpath = elastix_fit(to_elastix,pbar = pbar)
-            shutil.copyfile(transformpath,transform_path)
-            imsave(aligned_file,aligned)
+            aligned,transformpath = elastix_fit(to_elastix, pbar = pbar)
+            shutil.copyfile(transformpath, transform_path)
+            imsave(aligned_file, aligned)
         else:
             aligned = imread(aligned_file)
         
@@ -284,7 +284,7 @@ class BrainStack():
                     imsave(aligned_file,aligned_res)
         
         print(params)
-
+        return params
         
 def trailmap_list_models():
     '''
