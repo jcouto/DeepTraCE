@@ -158,7 +158,8 @@ def elastix_fit(stack,
     # make that it works with registration template being an array!
     if not type(registration_template) is str:
         raise(ValueError("[ELASTIX] - not working without a tif template. Pass a filename."))
-
+    # First clean-up the folder. You can only run one brain at a time in a computer.
+    shutil.rmtree(deeptrace_preferences['elastix']['temporary_folder'])
     stack_path = pjoin(deeptrace_preferences['elastix']['temporary_folder'],'temporary_brain.tif')
     create_folder_if_no_filepath(stack_path)
     # prepare the file
@@ -209,6 +210,7 @@ def elastix_apply_transform(stack,transform_path,
                     outpath = None,
                     pbar = None):
     # make that it works with registration template being an array!
+    shutil.rmtree(deeptrace_preferences['elastix']['temporary_folder'])
     if not type(stack) is str:
         stack_path = pjoin(deeptrace_preferences['elastix']['temporary_folder'],'temporary_brain.tif')
         create_folder_if_no_filepath(stack_path)
