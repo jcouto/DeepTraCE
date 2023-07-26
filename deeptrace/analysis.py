@@ -205,6 +205,7 @@ class BrainStack():
         params['angles'] = angles
         if scales is None:
             params['scales'] = deeptrace_preferences['downsample_factor']
+        trailmap_models = [t for t in trailmap_models] # convert to a list if not
         params['trailmap_models'] = trailmap_models
         params['analysis_folder'] = self.analysis_folder
         create_folder_if_no_filepath(fname)
@@ -290,7 +291,8 @@ def trailmap_list_models():
     '''
     Lists trailmap models in the models_folder
     '''
-    return glob(pjoin(deeptrace_preferences['trailmap']['models_folder'],'*.hdf5'))
+    return natsorted(np.array(glob(
+        pjoin(deeptrace_preferences['trailmap']['models_folder'],'*.hdf5'))))
 
 def get_normalized_padded_input_array(files,chunk):
     arr = []
@@ -371,7 +373,7 @@ trailmap_segment_tif_files(model_path, files,pbar = pbar)
         # get data from stack
         arr = get_normalized_padded_input_array(files,chunk)
         # run the model
-        res = trailmap_apply_model(model,arr,batch_size = batch_size, threshold = threshold)
+        res = trailmap_apply_model(model, arr, batch_size = batch_size, threshold = threshold)
         # save the array
         write_res(res,chunk)
         if not pbar is None:

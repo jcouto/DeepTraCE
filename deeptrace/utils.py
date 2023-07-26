@@ -97,6 +97,8 @@ stack.set_active_channels(0)
 downsample_stack(stack,scales,pbar = pbar,chunksize = 256)
 pbar.close()
     
+    Joao Couto - deeptrace 2023
+
     '''
     downsampled = []
     if not pbar is None:
@@ -118,6 +120,12 @@ pbar.close()
 
 
 def rotate_stack(stack, anglex = 0, angley = 0, anglez = 0):
+    '''
+    Rotate a stack in 3d.
+
+    Joao Couto - deeptrace 2023
+    '''
+    
     if anglez != 0:
         tt = rotate(stack, angle = anglez, axes = [1,2], reshape = False)
     else:
@@ -131,6 +139,8 @@ def rotate_stack(stack, anglex = 0, angley = 0, anglez = 0):
 def frame_to_rgb(frame):
     '''
     Frame needs to have 3 dims (channel,H,W)
+
+    Joao Couto - deeptrace 2023
     '''
     tmp = []
     for i in range(3):

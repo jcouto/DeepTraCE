@@ -1,19 +1,17 @@
 name: deeptrace
-
-channels:
-   - conda-forge
 dependencies:
    - python
-   - tensorflow-gpu
+   - tensorflow-gpu==2.1.0
+   - tensorflow-estimator
+   - h5py==2.10.0
+   - keras
    - scipy
    - matplotlib
    - jupyter
-   - simpleitk
-   - napari
+   - pandas
    - pip
    - pip:
      - tifffile
      - tqdm
-     - ipywidgets
      - scikit-image
-     
+     - natsort
