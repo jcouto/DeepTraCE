@@ -251,12 +251,14 @@ class BrainStack():
             to_elastix = imread(filename)
         # run elastix on the first channel
         aligned_file = pjoin(self.analysis_folder,'aligned.tiff')
-        transform_path = pjoin(self.analysis_folder,'transformix.txt')
+        transform_path = pjoin(self.analysis_folder,'transformix')
         if not os.path.exists(transform_path):
             print('[DeepTraCE] Fitting the alignment channel with elastix')
             from .elastix_utils import elastix_fit
-            aligned,transformpath = elastix_fit(to_elastix, pbar = pbar)
-            shutil.copyfile(transformpath, transform_path)
+            aligned,transformpaths = elastix_fit(to_elastix, pbar = pbar)
+            os.makedirs(transform_path,exist_ok = True)
+            for f in transformpaths:
+                shutil.copyfile(f, pjoin(transform_path,os.path.basename(f)))
             imsave(aligned_file, aligned)
         else:
             aligned = imread(aligned_file)
@@ -281,7 +283,9 @@ class BrainStack():
                 from .elastix_utils import elastix_apply_transform
                 aligned_file = pjoin(self.analysis_folder,modelname+'_aligned.tiff')
                 if not os.path.exists(aligned_file):
-                    aligned_res = elastix_apply_transform(to_elastix,transform_path,pbar = pbar)
+                    aligned_res = elastix_apply_transform(to_elastix,
+                                                          transform_path,
+                                                          pbar = pbar)
                     imsave(aligned_file,aligned_res)
         
         print(params)

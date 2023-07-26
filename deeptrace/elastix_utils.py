@@ -201,14 +201,20 @@ def elastix_fit(stack,
             pbar.update(1)
         if ret is not None:
             break
-    transformix_parameters_path = pjoin(outpath,'TransformParameters.1.txt') # needs to be TransformParameters.1.txt for transformix
+  
+    transformix_parameters_paths = (pjoin(outpath,'TransformParameters.0.txt'),
+                                   pjoin(outpath,'TransformParameters.1.txt')) # needs to be both for transformix, copy these together
     # The output filename will depend on the transforms.. 
-    return imread(pjoin(outpath,'result.1.tiff')), transformix_parameters_path
+    return imread(pjoin(outpath,'result.1.tiff')), transformix_parameters_paths
 
 def elastix_apply_transform(stack,transform_path,
                     elastix_path = deeptrace_preferences['elastix']['path'],
                     outpath = None,
                     pbar = None):
+    '''
+    transform path is a folder with 2 files
+    '''
+    
     # make that it works with registration template being an array!
     shutil.rmtree(deeptrace_preferences['elastix']['temporary_folder'])
     if not type(stack) is str:
@@ -218,6 +224,16 @@ def elastix_apply_transform(stack,transform_path,
         imsave(stack_path,stack)
     else:
         stack_path = stack
+    transformfiles = glob(pjoin(transform_path,'TransformParameters.*'))
+    if not len(transformfiles):
+        raise(ValueError('Could not find transform files.'))
+    for f in transformfiles:
+        shutil.copyfile(f, pjoin(deeptrace_preferences['elastix']['temporary_folder'],os.path.basename(f)))
+    transform_path = glob(pjoin(transform_path,'TransformParameters.1.*'))
+    if len(transform_path):
+        transform_path = transform_path[0]
+    else:
+        raise(ValueError('Could not find TransformParameters.1.txt'))
     if outpath is None:
         outpath = deeptrace_preferences['elastix']['temporary_folder']
     create_folder_if_no_filepath(outpath)
