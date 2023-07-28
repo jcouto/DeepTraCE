@@ -180,15 +180,15 @@ def elastix_fit(stack,
         # assume that it is in path
         elastix_path = "elastix"
         
-    elastixcmd = '{elastix_path} -f {template} -m {stack_path} -out {outpath} -p {p0} -p {p1}'.format(
+    elastixcmd = r'{elastix_path} -f "{template}" -m "{stack_path}" -out "{outpath}" -p "{p0}" -p "{p1}"'.format(
         elastix_path = elastix_path,
         template = registration_template,
         stack_path = stack_path,
         outpath = outpath,
         p0 = p0,
         p1 = p1)
-    proc = sub.Popen(elastixcmd.split(' '),
-                 shell=False,
+    proc = sub.Popen(elastixcmd,
+                 shell=True,
                  stdout=sub.PIPE)
                  # preexec_fn=os.setsid) # does not work on windows?
     if not pbar is None:
@@ -229,7 +229,7 @@ def elastix_apply_transform(stack,transform_path,
         raise(ValueError('Could not find transform files.'))
     for f in transformfiles:
         shutil.copyfile(f, pjoin(deeptrace_preferences['elastix']['temporary_folder'],os.path.basename(f)))
-    transform_path = glob(pjoin(transform_path,'TransformParameters.1.*'))
+    transform_path = glob(pjoin(deeptrace_preferences['elastix']['temporary_folder'],'TransformParameters.1.*'))
     if len(transform_path):
         transform_path = transform_path[0]
     else:
@@ -243,13 +243,13 @@ def elastix_apply_transform(stack,transform_path,
     else:
         elastix_path = elastix_path.replace('elastix',"transformix")
         
-    elastixcmd = '{elastix_path} -in {stack} -out {outpath} -tp {t1}'.format(
+    elastixcmd = r'{elastix_path} -in "{stack}" -out "{outpath}" -tp "{t1}"'.format(
         elastix_path = elastix_path,
         stack = stack_path,
         outpath = outpath,
         t1 = transform_path)
-    proc = sub.Popen(elastixcmd.split(' '),
-                 shell=False,
+    proc = sub.Popen(elastixcmd,
+                 shell=True,
                  stdout=sub.PIPE)
                  #preexec_fn=os.setsid)  # does not work on windows
     if not pbar is None:
