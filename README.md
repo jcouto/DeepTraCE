@@ -5,7 +5,6 @@
 We recoment using a python distribution like [Anaconda Python](https://www.anaconda.com/).
 [Trailmap](https://github.com/AlbertPun/TRAILMAP) uses [Tensorflow 2.1](https://www.tensorflow.org/) to segment brains and has been tested with Python 3.7; we include the necessary files for trailmap so no need to install it.
 
-
 The installation steps assume you have installed Anaconda Python.
 
 ##### Installation steps:
@@ -13,8 +12,7 @@ The installation steps assume you have installed Anaconda Python.
 2. go into the repository folder with the terminal and create the conda environement ``conda env create -f conda-environment.yml``
 3. run ``conda activate deeptrace`` followed by ``python setup.py develop``
 The first time the package is imported it create a ``DeepTraCe`` folder (see below). You'll need to unzip the contents of the models and atlas to the ``DeepTraCE`` folder.
-
-
+4. Download [**elastix**](https://github.com/SuperElastix/elastix/releases/tag/5.1.0) and add it to the path. To add it to the path you can copy the binary files to the conda ``bin`` directory - ``echo $CONDA_PREFIX/bin`` from a linux/mac terminal or ``echo %CONDA_PREFIX%\bin`` from a windows commandline.
 
 #### Note:
 
@@ -31,8 +29,6 @@ The ``DeepTraCE`` folder contains:
    - *model_selection.csv* - table to select which model gets used for each area
 
 **Important** Download the models and the atlas from [here](https://drive.google.com/file/d/1-TpVhovErZYMHRs4vbum6FPOJ0JKTGTD/view?usp=sharing) and **unzip** it to the ``DeepTraCE`` folder.
-
-
 
 ### Analysis steps:
 
