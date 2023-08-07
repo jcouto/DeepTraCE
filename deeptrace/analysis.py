@@ -62,6 +62,8 @@ class BrainStack():
 
         if analysis_folder is None:
             self.analysis_folder = pjoin('{ch0folder}','..','deeptrace_analysis','{ch0}')
+        else:
+            self.analysis_folder = analysis_folder
         self.analysis_folder = os.path.abspath(self.analysis_folder.format(**self.pathdict))
         # this function expects one image per folder so the nframes is the number of files
         self.nframes = len(self.channel_files[0])
@@ -264,6 +266,7 @@ class BrainStack():
             aligned = imread(aligned_file)
         
         # downsample all the model stacks and apply transforms
+        from .elastix_utils import elastix_apply_transform
         if 'trailmap_segmentation' in params.keys():
             modeldata = BrainStack(params['trailmap_segmentation'])
             for ichan in range(len(params['trailmap_segmentation'])):
@@ -280,15 +283,31 @@ class BrainStack():
                     imsave(filename,to_elastix)
                 else:
                     to_elastix = imread(filename)
-                from .elastix_utils import elastix_apply_transform
+
                 aligned_file = pjoin(self.analysis_folder,modelname+'_aligned.tiff')
                 if not os.path.exists(aligned_file):
                     aligned_res = elastix_apply_transform(to_elastix,
                                                           transform_path,
                                                           pbar = pbar)
                     imsave(aligned_file,aligned_res)
-        
-        print(params)
+
+        # then apply transformix on raw images
+        if self.nchannels>1:
+            for ichan in range(1,self.nchannels):
+                channelname = os.path.basename(self.channel_folders[ichan])
+                filename = pjoin(folder,channelname+'.tiff')
+                self.set_active_channels(ichan)
+                stack = downsample_stack(self,scales,pbar = pbar, convert = True) # convert to uint8
+                print('[DeepTraCE] Rotating the {0}'.format(channelname))
+                to_elastix = rotate_stack(stack,
+                                          *angles)
+                imsave(filename,to_elastix)
+                aligned_file = pjoin(self.analysis_folder,channelname+'_aligned.tiff')
+                if not os.path.exists(aligned_file):
+                    aligned_res = elastix_apply_transform(to_elastix,
+                                                          transform_path,
+                                                          pbar = pbar)
+                    imsave(aligned_file,aligned_res)
         return params
         
 def trailmap_list_models():

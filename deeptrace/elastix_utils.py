@@ -34,7 +34,7 @@ elastixpar0 = '''//Affine Transformation - updated May 2012
 
 (WriteTransformParametersEachIteration "false")
 (WriteResultImage "false")
-(CompressResultImage "true")
+(CompressResultImage "false")
 (WriteResultImageAfterEachResolution "false") 
 (ShowExactMetricValue "false")
 
@@ -98,7 +98,9 @@ elastixpar1 = '''//Bspline Transformation - updated May 2012
 (WriteTransformParametersEachIteration "false")
 (WriteResultImage "true")
 (ResultImageFormat "tiff")
-(ResultImagePixelType "unsigned char")
+//unsigned char gives issues when values are very close to the max range (i.e. for 255)
+//(ResultImagePixelType "unsigned char")
+(ResultImagePixelType "short")
 (CompressResultImage "false")
 (WriteResultImageAfterEachResolution "false")
 (ShowExactMetricValue "false")
@@ -201,11 +203,12 @@ def elastix_fit(stack,
             pbar.update(1)
         if ret is not None:
             break
-  
+
     transformix_parameters_paths = (pjoin(outpath,'TransformParameters.0.txt'),
-                                   pjoin(outpath,'TransformParameters.1.txt')) # needs to be both for transformix, copy these together
-    # The output filename will depend on the transforms.. 
-    return imread(pjoin(outpath,'result.1.tiff')), transformix_parameters_paths
+                                    pjoin(outpath,'TransformParameters.1.txt')) # needs to be both for transformix, copy these together
+    # The output filename will depend on the transforms..
+    # clip to uint8
+    return np.clip(imread(pjoin(outpath,'result.1.tiff')),0,255).astype('uint8'), transformix_parameters_paths
 
 def elastix_apply_transform(stack,transform_path,
                     elastix_path = deeptrace_preferences['elastix']['path'],
@@ -262,4 +265,5 @@ def elastix_apply_transform(stack,transform_path,
             pbar.update(1)
         if ret is not None:
             break
-    return imread(pjoin(outpath,'result.tiff'))
+    # clip to uint8 because output is Elastix was overflowing.
+    return np.clip(imread(pjoin(outpath,'result.tiff')),0,255).astype('uint8')
