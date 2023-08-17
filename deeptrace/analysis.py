@@ -168,6 +168,8 @@ class BrainStack():
         return downsample_files
 
     def deeptrace_analysis(self, angles = None,
+                           flip_x = None,
+                           flip_y = None,
                            scales = None,
                            trailmap_models = None,
                            trailmap_channel = None,
@@ -177,7 +179,6 @@ class BrainStack():
         if os.path.exists(fname):
             with open(fname,'r') as f:
                 params = json.load(f)
-            
         if trailmap_models is None:
             if 'trailmap_models' in params.keys():
                 trailmap_models = params['trailmap_models']
@@ -192,14 +193,18 @@ class BrainStack():
 
         if scales is None:
             scales = deeptrace_preferences['downsample_factor']
-        
+        if not flip_x is None:
+            params['flip_x'] = flip_x
+        if not flip_x is None:
+            params['flip_y'] = flip_y
         if angles is None:
             if 'angles' in params.keys():
                 angles = params['angles']
             else:
                 print('[DeepTraCE] Rotation angles are not set, please select at least one angle.')
                 if not len(self.downsampled_stack):
-                    self.downsample(channel_indices = [0],pbar = pbar) # downsample the first channel
+                    self.downsample(channel_indices = [0],
+                                    pbar = pbar) # downsample the first channel
                 from deeptrace.plotting import interact_find_angles
                 res = interact_find_angles(self.downsampled_stack[0])
                 return res
@@ -247,7 +252,9 @@ class BrainStack():
             stack = downsample_stack(self, scales, pbar = pbar)
             print('[DeepTraCE] Rotating the alignment channel')
             to_elastix = rotate_stack(stack,
-                                      *angles)
+                                      *angles,
+                                      flip_x = params['flip_x'],
+                                      flip_y = params['flip_y'])
             imsave(filename,to_elastix)
         else:
             to_elastix = imread(filename)
@@ -279,7 +286,9 @@ class BrainStack():
                     stack = downsample_stack(modeldata,scales,pbar = pbar, convert = True) # convert to uint8
                     print('[DeepTraCE] Rotating the model')
                     to_elastix = rotate_stack(stack,
-                                              *angles)
+                                              *angles,
+                                              flip_x = params['flip_x'],
+                                              flip_y = params['flip_y'])
                     imsave(filename,to_elastix)
                 else:
                     to_elastix = imread(filename)
@@ -300,7 +309,9 @@ class BrainStack():
                 stack = downsample_stack(self,scales,pbar = pbar, convert = True) # convert to uint8
                 print('[DeepTraCE] Rotating the {0}'.format(channelname))
                 to_elastix = rotate_stack(stack,
-                                          *angles)
+                                          *angles,
+                                          flip_x = params['flip_x'],
+                                          flip_y = params['flip_y'])
                 imsave(filename,to_elastix)
                 aligned_file = pjoin(self.analysis_folder,channelname+'_aligned.tiff')
                 if not os.path.exists(aligned_file):

@@ -119,7 +119,7 @@ pbar.close()
     return downsampled
 
 
-def rotate_stack(stack, anglez = 0, angley = 0, anglex = 0):
+def rotate_stack(stack, anglez = 0, angley = 0, anglex = 0,flip_x = False,flip_y = False):
     '''
     Rotate a stack in 3d.
 
@@ -134,6 +134,10 @@ def rotate_stack(stack, anglez = 0, angley = 0, anglex = 0):
         tt = rotate(tt, angle = angley, axes = [0,2], reshape = False)
     if anglex != 0.0:
         tt = rotate(tt, angle = anglez, axes = [0,1], reshape = False)
+    if flip_x:
+        tt = tt[:,:,::-1]
+    if flip_y:
+        tt = tt[:,::-1,:]
     return tt
 
 def frame_to_rgb(frame):
