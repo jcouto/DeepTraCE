@@ -216,10 +216,6 @@ class BrainStack():
         params['trailmap_models'] = trailmap_models
         params['analysis_folder'] = self.analysis_folder
         create_folder_if_no_filepath(fname)
-        with open(fname,'w') as f:
-            json.dump(params,f,
-                      sort_keys = True, 
-                      indent = 4)
         # Run trailmap models
         for model_path in trailmap_models:
             model_folder = pjoin(self.analysis_folder,
@@ -302,23 +298,32 @@ class BrainStack():
 
         # then apply transformix on raw images
         if self.nchannels>1:
-            for ichan in range(1,self.nchannels):
-                channelname = os.path.basename(self.channel_folders[ichan])
-                filename = pjoin(folder,channelname+'.tiff')
-                self.set_active_channels(ichan)
-                stack = downsample_stack(self,scales,pbar = pbar, convert = True) # convert to uint8
-                print('[DeepTraCE] Rotating the {0}'.format(channelname))
-                to_elastix = rotate_stack(stack,
-                                          *angles,
-                                          flip_x = params['flip_x'],
-                                          flip_y = params['flip_y'])
-                imsave(filename,to_elastix)
-                aligned_file = pjoin(self.analysis_folder,channelname+'_aligned.tiff')
-                if not os.path.exists(aligned_file):
-                    aligned_res = elastix_apply_transform(to_elastix,
-                                                          transform_path,
-                                                          pbar = pbar)
-                    imsave(aligned_file,aligned_res)
+            if not 'aligned_channels' in params.keys():
+                params['aligned_channels'] = []
+                for ichan in range(1,self.nchannels):
+                    channelname = os.path.basename(os.path.abspath(self.channel_folders[ichan]))
+                    if not os.path.exists(aligned_file):
+                        filename = pjoin(folder,channelname+'.tiff')
+                        self.set_active_channels(ichan)
+                        stack = downsample_stack(self,scales,pbar = pbar, convert = True) # convert to uint8
+                        print('[DeepTraCE] Rotating the {0}'.format(channelname))
+                        to_elastix = rotate_stack(stack,
+                                                  *angles,
+                                                  flip_x = params['flip_x'],
+                                                  flip_y = params['flip_y'])
+                        imsave(filename,to_elastix)
+                        aligned_file = pjoin(self.analysis_folder,channelname+'_aligned.tiff')
+                        aligned_res = elastix_apply_transform(to_elastix,
+                                                              transform_path,
+                                                              pbar = pbar)
+                        imsave(aligned_file,aligned_res)
+                    params['aligned_channels'].append(channelname)
+        # save the parameters
+        with open(fname,'w') as f:
+            json.dump(params,f,
+                      sort_keys = True, 
+                      indent = 4)
+
         return params
         
 def trailmap_list_models():
@@ -461,8 +466,8 @@ def refine_connected_components(stack,nbins = 8, skel_threshold = 5, area_thresh
         idx.append(r.coords)
     idx = np.vstack(idx)
     threshres[idx[:,0],idx[:,1],idx[:,2]] = True
-
-    return threshres
+    res[~threshres] = 0
+    return res # return the refined model.
 
 def read_atlas(atlas_path = deeptrace_preferences['atlas'],
                ontology_path = deeptrace_preferences['ontology']):
@@ -485,7 +490,7 @@ def read_atlas(atlas_path = deeptrace_preferences['atlas'],
 def load_deeptrace_models(path):
     '''
     Loads aligned data to memory
-    params, aligned, aligned_models, merged_model = load_deeptrace_models()
+    params, aligned, aligned_models, aligned_other = load_deeptrace_models()
     
     '''
     cfg_file = pjoin(path,'deeptrace_parameters.json')
@@ -499,6 +504,7 @@ def load_deeptrace_models(path):
         raise(OSError('[DeepTraCE] Analysis results not found in {0}'.format(path)))
     aligned = imread(aligned_file)
     aligned_models = []
+    aligned_other = []
     if not 'trailmap_models' in params.keys():
         raise(OSError('[DeepTraCE] No models found in {0}'.format(path)))
     else:
@@ -509,7 +515,13 @@ def load_deeptrace_models(path):
                 aligned_models.append(imread(files[0]))
             else:
                 raise(OSError('[DeepTraCE] No models {0} in {1}'.format(modelname,path)))
-    return params,aligned,aligned_models
+    if 'aligned_channels' in params.keys():
+        for m in params['aligned_channels']:
+            aligned_file = pjoin(path,'{0}_aligned.tiff'.format(m))
+            if os.path.exists(aligned_file):
+                aligned_other.append(imread(aligned_file))
+
+    return params,aligned,aligned_models,aligned_other
 
 def combine_models(models, default_model, model_correspondence=None, ontology = None, atlas = None):
     '''
@@ -532,6 +544,19 @@ def combine_models(models, default_model, model_correspondence=None, ontology = 
     if default_model is None:
         default_model = int(len(models)/2)+1
     # load from the preferences
+    model_correspondence = load_model_selection(model_correspondence)
+    # Make the combined model                     
+    combined = models[default_model-1].copy()
+    for i,o in model_correspondence.iterrows():
+        if not o.model == default_model:
+            for ii in o.atlas_ids:
+                combined[atlas == ii] = models[o.model-1][atlas == ii]
+    
+    return combined, model_correspondence
+
+def load_model_selection(model_correspondence  = None, atlas = None,ontology = None):
+    if atlas is None or ontology is None:
+        atlas,ontology,header = read_atlas()    
     if model_correspondence is None:
         model_correspondence = deeptrace_preferences['model_selection']    
     if type(model_correspondence) is str:
@@ -545,16 +570,8 @@ def combine_models(models, default_model, model_correspondence=None, ontology = 
             if m.atlas_name.strip("'") in o['name']:
                 if o['id'] in unique_atlas_ids:
                     m['atlas_ids'].append(o['id'])
-    # Make the combined model                     
-    combined = models[default_model-1].copy()
-    for i,o in model_correspondence.iterrows():
-        if not o.model == default_model:
-            for ii in o.atlas_ids:
-                combined[atlas == ii] = models[o.model-1][atlas == ii]
+    return model_correspondence
     
-    return combined, model_correspondence
-
-
 def count_labeling_density(refined_model, model_selection, ontology = None, atlas = None):
 
     if ontology is None or atlas is None:

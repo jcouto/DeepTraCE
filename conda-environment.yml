@@ -9,6 +9,7 @@ dependencies:
    - matplotlib
    - jupyter
    - pandas
+   - mayavi
    - pip
    - pip:
      - tifffile
