@@ -2,7 +2,7 @@ from .utils import (downsample_stack,
                     rotate_stack,
                     frame_to_rgb,
                     chunk_indices,
-                    imwrite,
+                    imsave,
                     deeptrace_preferences)
 
 from .elastix_utils import elastix_fit, elastix_apply_transform
