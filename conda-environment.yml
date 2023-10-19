@@ -6,7 +6,6 @@ dependencies:
    - h5py==2.10.0
    - keras
    - scipy
-   - matplotlib
    - jupyter
    - pandas
    - mayavi
@@ -17,3 +16,5 @@ dependencies:
      - scikit-image
      - natsort
      - pynrrd
+     - matplotlib
+     - pillow
