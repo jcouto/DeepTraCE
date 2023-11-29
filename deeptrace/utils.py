@@ -119,20 +119,20 @@ pbar.close()
     return downsampled
 
 
-def rotate_stack(stack, anglez = 0, angley = 0, anglex = 0,flip_x = False,flip_y = False):
+def rotate_stack(stack, anglez = 0, angley = 0, anglex = 0, flip_x = False, flip_y = False):
     '''
     Rotate a stack in 3d.
 
     Joao Couto - deeptrace 2023
     '''
     
-    if anglez != 0:
+    if anglex != 0.0:
         tt = rotate(stack, angle = anglex, axes = [1,2], reshape = False)
     else:
         tt = stack.copy()
     if angley != 0.0:
         tt = rotate(tt, angle = angley, axes = [0,2], reshape = False)
-    if anglex != 0.0:
+    if anglez != 0.0:
         tt = rotate(tt, angle = anglez, axes = [0,1], reshape = False)
     if flip_x:
         tt = tt[:,:,::-1]

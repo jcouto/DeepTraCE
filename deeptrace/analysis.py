@@ -201,13 +201,31 @@ class BrainStack():
             if 'angles' in params.keys():
                 angles = params['angles']
             else:
-                print('[DeepTraCE] Rotation angles are not set, please select at least one angle.')
+                print('[DeepTraCE] Rotation angles are not set, please use the alignment tool to set the angles.')
+                print('''
+Instructions:
+      This will first downsample the stack.
+      Use the mouse scroll wheel to select planes in each figure.
+      Choose point by right clicking the first and second figures. Left click remove the last point added to that figure.
+ 
+      Try to find the midline in both and click along the midline to calculate the angles.
+                
+      On the third panel, right click to flip X, left click to flip Y.
+      Get the cerebellum and the cortex on the side of the text.
+
+      The analysis will continue once you close the figure.
+                
+''')
                 if not len(self.downsampled_stack):
                     self.downsample(channel_indices = [0],
                                     pbar = pbar) # downsample the first channel
-                from deeptrace.plotting import interact_find_angles
-                res = interact_find_angles(self.downsampled_stack[0])
-                return res
+                from deeptrace.plotting import interact_rotate
+                res = interact_rotate(self.downsampled_stack[0])
+                params['flip_x'] = res['flip_x']
+                params['flip_y'] = res['flip_y']
+                params['angles'] = res['angles']
+                angles = params['angles']
+                #return res
         params['trailmap_channel'] = trailmap_channel
         params['angles'] = angles
         if scales is None:
