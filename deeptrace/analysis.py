@@ -309,6 +309,7 @@ Instructions:
 
                 aligned_file = pjoin(self.analysis_folder,modelname+'_aligned.tiff')
                 if not os.path.exists(aligned_file):
+                    print('[DeepTraCE] Aligning {0}'.format(modelname))
                     aligned_res = elastix_apply_transform(to_elastix,
                                                           transform_path,
                                                           pbar = pbar)
@@ -316,26 +317,27 @@ Instructions:
 
         # then apply transformix on raw images
         if self.nchannels>1:
-            if not 'aligned_channels' in params.keys():
-                params['aligned_channels'] = []
-                for ichan in range(1,self.nchannels):
-                    channelname = os.path.basename(os.path.abspath(self.channel_folders[ichan]))
-                    if not os.path.exists(aligned_file):
-                        filename = pjoin(folder,channelname+'.tiff')
-                        self.set_active_channels(ichan)
-                        stack = downsample_stack(self,scales,pbar = pbar, convert = True) # convert to uint8
-                        print('[DeepTraCE] Rotating the {0}'.format(channelname))
-                        to_elastix = rotate_stack(stack,
-                                                  *angles,
-                                                  flip_x = params['flip_x'],
-                                                  flip_y = params['flip_y'])
-                        imsave(filename,to_elastix)
-                        aligned_file = pjoin(self.analysis_folder,channelname+'_aligned.tiff')
-                        aligned_res = elastix_apply_transform(to_elastix,
-                                                              transform_path,
-                                                              pbar = pbar)
-                        imsave(aligned_file,aligned_res)
-                    params['aligned_channels'].append(channelname)
+            #if not 'aligned_channels' in params.keys():
+            params['aligned_channels'] = []
+            for ichan in range(1,self.nchannels):
+                channelname = os.path.basename(os.path.abspath(self.channel_folders[ichan]))
+                aligned_file = pjoin(self.analysis_folder,channelname+'_aligned.tiff')
+                if not os.path.exists(aligned_file):
+                    filename = pjoin(folder,channelname+'.tiff')
+                    self.set_active_channels(ichan)
+                    stack = downsample_stack(self,scales,pbar = pbar, convert = True) # convert to uint8
+                    print('[DeepTraCE] Rotating the {0}'.format(channelname))
+                    to_elastix = rotate_stack(stack,
+                                              *angles,
+                                              flip_x = params['flip_x'],
+                                              flip_y = params['flip_y'])
+                    imsave(filename,to_elastix)
+                    print('[DeepTraCE] Aligning {0}'.format(channelname))
+                    aligned_res = elastix_apply_transform(to_elastix,
+                                                          transform_path,
+                                                          pbar = pbar)
+                    imsave(aligned_file,aligned_res)
+                params['aligned_channels'].append(channelname)
         # save the parameters
         with open(fname,'w') as f:
             json.dump(params,f,
@@ -351,16 +353,18 @@ def trailmap_list_models():
     return natsorted(np.array(glob(
         pjoin(deeptrace_preferences['trailmap']['models_folder'],'*.hdf5'))))
 
-def get_normalized_padded_input_array(files,chunk):
+def get_normalized_padded_input_array(files,chunk,njobs = 6):
     arr = []
+    # read the files in parallel
     for i in range(chunk[0],chunk[1]):
         if i < 0:
-            arr.append(read_ome_tif(files[0]))
+            arr.append(files[0])
         elif i > len(files)-1:
-            arr.append(read_ome_tif(files[len(files)-1]))
+            arr.append(files[len(files)-1])
         else:
-            arr.append(read_ome_tif(files[i]))
-            
+            arr.append(files[i])
+    with Pool(processes=njobs) as pool:
+        arr = pool.map(read_ome_tif,arr)
     return np.stack(arr).astype(np.float32)/(2**16 -1)
     
 def trailmap_segment_tif_files(model_path, files,
@@ -426,6 +430,7 @@ trailmap_segment_tif_files(model_path, files,pbar = pbar)
             fname = os.path.basename(files[chunk[0]+i])
             out_fname = pjoin(output_folder,'seg_' + fname)
             imsave(out_fname,res[i])
+            
     for ichunk,chunk in enumerate(chunks):
         # get data from stack
         arr = get_normalized_padded_input_array(files,chunk)
@@ -443,7 +448,7 @@ from skimage.morphology import  skeletonize_3d
 from skimage import measure
 from multiprocessing import Pool
 
-def skeletonize_multithreshold_uint8_stack(stack, nbins = 8):
+def skeletonize_multithreshold_uint8_stack(stack, nbins = 8, njobs = 8):
     '''
     This runs skeletonize_3d for the threshold values in parallel. 
     Thin each connected component single-pixel wide skeleton for different thresholds (nbins).
@@ -453,7 +458,7 @@ def skeletonize_multithreshold_uint8_stack(stack, nbins = 8):
     JC - 03/2023
     '''
     thresh = ((np.linspace(3,nbins+2,nbins)-1.)/(nbins+2) * 255).astype('uint8')
-    with Pool() as pool:
+    with Pool( processes = njobs) as pool:
         bws = pool.map(skeletonize_3d,[(stack>th).astype(bool) for th in thresh])
     res = (np.stack(bws).astype(bool).T*np.arange(len(bws))).T.sum(axis = 0)
     return res

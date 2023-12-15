@@ -76,8 +76,17 @@ def chunk_indices(nframes, chunksize = 512, min_chunk_size = 16):
         chunks = np.hstack([chunks,nframes])
     return [[chunks[i],chunks[i+1]] for i in range(len(chunks)-1)]
 
-
-def downsample_stack(stack,scales, convert = True, chunksize = 50, pbar=None):
+def _read_files_and_downsample(files,scales,convert = True):
+    stack = []
+    for f in files:
+        s = read_ome_tif(f)
+        if convert:
+            s = img_as_ubyte(s)
+        stack.append(ndimage.zoom(s, zoom=scales[:2]))
+    return stack
+    
+    
+def downsample_stack(stack,scales, convert = True, chunksize = 50, pbar=None,njobs = 8):
     '''
     Downsample a stack
 
@@ -103,14 +112,27 @@ pbar.close()
     downsampled = []
     if not pbar is None:
         pbar.total = len(stack)+1
-    with Pool() as pool:        
-        for s,e in chunk_indices(len(stack),chunksize):
-            ss = stack[s:e]
-            if convert:
-                ss = img_as_ubyte(ss)
-            downsampled.extend(pool.map(partial(ndimage.zoom, zoom=scales[:2]), [s for s in ss]))
-            if not pbar is None:
-                pbar.update(len(ss))
+        
+    with Pool(processes = njobs) as pool:
+        if hasattr(stack,"active_channels"):
+            #then run a pool on the files to read in parallel.
+            files = np.array(stack.channel_files[stack.active_channels[0]])
+            chunks = chunk_indices(len(files),chunksize)
+            file_chunks = []
+            for s,e in chunk_indices(len(stack),chunksize):
+                file_chunks.append(files[s:e])
+            from tqdm import tqdm
+            downsampled = pool.map(partial(_read_files_and_downsample,scales = scales,convert = convert),tqdm(file_chunks,desc='Downsampling'))
+            downsampled = np.concatenate(downsampled,axis=0)
+            
+        else:
+            for s,e in chunk_indices(len(stack),chunksize):
+                ss = stack[s:e]
+                if convert:
+                    ss = img_as_ubyte(ss)
+                downsampled.extend(pool.map(partial(ndimage.zoom, zoom=scales[:2]), [s for s in ss]))
+                if not pbar is None:
+                    pbar.update(len(ss))
     downsampled = np.stack(downsampled)
     downsampled = ndimage.zoom(downsampled,[scales[-1],1,1])
     if not pbar is None:
