@@ -316,9 +316,7 @@ Instructions:
                     imsave(aligned_file,aligned_res)
 
         # then apply transformix on raw images
-        if self.nchannels>1:
-            #if not 'aligned_channels' in params.keys():
-            params['aligned_channels'] = []
+        if self.nchannels>=1:
             for ichan in range(1,self.nchannels):
                 channelname = os.path.basename(os.path.abspath(self.channel_folders[ichan]))
                 aligned_file = pjoin(self.analysis_folder,channelname+'_aligned.tiff')
@@ -337,7 +335,6 @@ Instructions:
                                                           transform_path,
                                                           pbar = pbar)
                     imsave(aligned_file,aligned_res)
-                params['aligned_channels'].append(channelname)
         # save the parameters
         with open(fname,'w') as f:
             json.dump(params,f,

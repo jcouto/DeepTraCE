@@ -215,11 +215,13 @@ def interact_rotate(x,cmap = 'gray',clim = None,
     #x = downsample_stack(X,[0.3,0.3,0.3])
     
     xviews = [x.transpose(2,0,1),x.transpose(1,2,0),x]
-    iframe = [i//2 for i in x.shape]
+    iframe = [i.shape[0]//2 for i in xviews]
     points = [[] for i in range(3)]
     points_plots = []
     fits = []
     angles_text = []
+    if clim is None:
+        clim = [np.percentile(x,10),np.percentile(x,99.5)]
     for i in range(3):
         ax.append(fig.add_subplot(1,3,1+i))
     
@@ -249,8 +251,12 @@ def interact_rotate(x,cmap = 'gray',clim = None,
                     y = yy[1]-yy[0]
                     if i == 0: # cos
                         res['angles'][i] = np.rad2deg(np.arcsin(y/np.sqrt(x**2 + y**2)))
+                        if res['angles'][i] > 90:
+                            res['angles'][i] = res['angles'][i] - 180
                     elif i == 1: # sin
                         res['angles'][i] = np.rad2deg(np.arccos(y/np.sqrt(x**2 + y**2)))
+                        if res['angles'][i] > 90:
+                            res['angles'][i] = res['angles'][i]- 180
                     elif i == 2:
                         print('Not implemented')
 
