@@ -222,6 +222,7 @@ def interact_rotate(x,cmap = 'gray',clim = None,
     angles_text = []
     if clim is None:
         clim = [np.percentile(x,10),np.percentile(x,99.5)]
+        print(clim)
     for i in range(3):
         ax.append(fig.add_subplot(1,3,1+i))
     

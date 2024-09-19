@@ -62,7 +62,13 @@ def get_preferences(prefpath = None):
 deeptrace_preferences = get_preferences()
 
 def read_ome_tif(file):
-    return TiffFile(file).pages.get(0).asarray()
+    try:
+        res = TiffFile(file).pages.get(0).asarray()
+    except Exception as err:
+        print(f'TIFF error for {file}')
+        print(err) # raise the exception again
+        raise(OSError(f'TIFF error for {file}'))
+    return res
         
 def chunk_indices(nframes, chunksize = 512, min_chunk_size = 16):
     '''
@@ -81,7 +87,11 @@ def _read_files_and_downsample(files,scales,convert = True):
     for f in files:
         s = read_ome_tif(f)
         if convert:
-            s = img_as_ubyte(s)
+            if s.dtype in [np.uint16]:
+                # skimage will only cast if it fits and that is silly
+                s = np.clip(np.multiply(s,256/65536),0,255).astype(np.uint8)
+            else:
+                s = img_as_ubyte(s)
         stack.append(ndimage.zoom(s, zoom=scales[:2]))
     return stack
     
