@@ -320,6 +320,7 @@ Instructions:
             for ichan in range(1,self.nchannels):
                 channelname = os.path.basename(os.path.abspath(self.channel_folders[ichan]))
                 aligned_file = pjoin(self.analysis_folder,channelname+'_aligned.tiff')
+                create_folder_if_no_filepath(aligned_file)
                 if not os.path.exists(aligned_file):
                     filename = pjoin(folder,channelname+'.tiff')
                     self.set_active_channels(ichan)

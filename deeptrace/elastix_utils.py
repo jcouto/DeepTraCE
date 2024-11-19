@@ -177,7 +177,7 @@ def elastix_fit(stack,
         fd.write(par1)
     if outpath is None:
         outpath = deeptrace_preferences['elastix']['temporary_folder']
-    create_folder_if_no_filepath(outpath)
+    create_folder_if_no_filepath(pjoin(outpath,'temporary.tmp'))
     if elastix_path is None:
         # assume that it is in path
         elastix_path = "elastix"
